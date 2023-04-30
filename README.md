@@ -12,6 +12,9 @@ Replace NumOfNodes with number of desired nodes eg. 3
 Replace Difficutly with desired difficulty eg. 4
 Replace ReputationThreshold with a suitable value eg. 5
 
+Please see SampleExection.png for a sample on how to run the code.
+https://github.com/Ammar-Amjad/ReputationBlockchain/blob/main/SampleExecution.png
+
 # Abstract
 This paper investigates the blockchain trilemma,
 a challenge in achieving simultaneous security, scalability, and
