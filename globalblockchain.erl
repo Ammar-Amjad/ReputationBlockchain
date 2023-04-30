@@ -12,38 +12,37 @@
 %                 -> clear reputation
 -module(globalblockchain).
 
--export([start/2, server/3, miner/4, add_block/1, create_block/2]).
+-export([start/3, server/4, miner/5, add_block/1, create_block/2]).
 -record(block, {index, timestamp, data, prev_hash, nonce}).
 
-start(N, Diff) when N > 0 ->
-    ServerPid = spawn(globalblockchain, server, [0, 0, #{}]),
-    spawn_miners(N, ServerPid, Diff).
+start(N, Diff, Reputation) when N > 0 ->
+    ServerPid = spawn(globalblockchain, server, [0, 0, #{}, Reputation]),
+    spawn_miners(N, ServerPid, Diff, Reputation).
 
-spawn_miners(0, _, _) ->
+spawn_miners(0, _, _, _) ->
     ok;
-spawn_miners(N, ServerPid, Diff) when N > 0 ->
-    spawn(globalblockchain, miner, [ServerPid, Diff, global, #{}]),
-    spawn_miners(N - 1, ServerPid, Diff).
+spawn_miners(N, ServerPid, Diff, Reputation) when N > 0 ->
+    spawn(globalblockchain, miner, [ServerPid, Diff, regional, #{}, Reputation]),
+    spawn_miners(N - 1, ServerPid, Diff, Reputation).
 
-server(Count, TotalTime, RPIDMap) ->
+server(Count, TotalTime, RPIDMap, Reputation) ->
     receive
         {miner, _, _, TimeTaken, RPID} ->
             NewCount = Count + 1,
             NewTotalTime = TotalTime + TimeTaken,
             AverageTime = NewTotalTime / NewCount,
             io:format("Average time taken to find block: ~p seconds~n", [AverageTime]),
-            NewRPIDMap = update_rpid_map(RPIDMap, RPID),
+            NewRPIDMap = update_rpid_map(RPIDMap, RPID, Reputation),
             RPIDFingerTable = chord:get_ids(RPID),
             io:format("Map: ~p ~p ~n", [NewRPIDMap, RPIDFingerTable]),
-            server(NewCount, NewTotalTime, NewRPIDMap)
+            server(NewCount, NewTotalTime, NewRPIDMap, Reputation)
     end.
 
-update_rpid_map(RPIDMap, RPID) ->
-    Reputation = 5,
+update_rpid_map(RPIDMap, RPID, Reputation) ->
     case maps:find(RPID, RPIDMap) of
         {ok, Count} ->
             NewRPIDMap = if Count + 1 >= Reputation ->
-                            maps:put(RPID, 0, RPIDMap); % Set RPID value to 0 if it reaches 5
+                            maps:put(RPID, 0, RPIDMap);
                          true ->
                             maps:put(RPID, Count + 1, RPIDMap)
                          end,
@@ -51,39 +50,42 @@ update_rpid_map(RPIDMap, RPID) ->
         error -> maps:put(RPID, 1, RPIDMap)
     end.
 
-miner(ServerPid, Diff, MiningType, RPIDMap) ->
+miner(ServerPid, Diff, MiningType, RPIDMap, Reputation) ->
     {Result, TimeTaken, PID} = pow:find_pow(Diff, MiningType),
     ServerPid ! {miner, self(), Result, TimeTaken, PID},
-    NewRPIDMap = update_rpid_map(RPIDMap, PID),
-    io:fwrite("~p ~n ~p ~p ~n", [Result, MiningType, maps:get(PID, NewRPIDMap)]),
+    NewRPIDMap = update_rpid_map(RPIDMap, PID, Reputation),
+    io:fwrite("~p ~n ~p ~n", [Result, MiningType]),
+    RPIDCount = maps:get(PID, NewRPIDMap),
+    Rep = Reputation - 1,
     case MiningType of
         global ->
-            NextDiff = case maps:get(PID, NewRPIDMap) of
-                                5-1 -> Diff - 1;
+            NextDiff = case RPIDCount of
+                                Rep -> Diff - 1;
                                 _ -> Diff
                              end;
         regional ->
-            NextDiff = case maps:get(PID, NewRPIDMap) of
-                                5-1 -> Diff + 1;
+            NextDiff = case RPIDCount of
+                                Rep -> Diff + 1;
                                 _ -> Diff
                              end
     end,
     case MiningType of
         global ->
-            NextMiningType = case maps:get(PID, NewRPIDMap) of
-                                5-1 -> regional;
+            NextMiningType = case RPIDCount of
+                                Rep -> regional;
                                 _ -> global
                              end;
         regional ->
-            NextMiningType = case maps:get(PID, NewRPIDMap) of
-                                5-1 -> rollup(NewRPIDMap),
+            NextMiningType = case RPIDCount of
+                                Rep -> rollup(NewRPIDMap),
                                     io:fwrite("Transactions rolled up~n"),
                                     global;
                                 _ -> regional
                              end
     end,
     io:fwrite("Diff ~p ~n", [NextDiff]),
-    miner(ServerPid, NextDiff, NextMiningType, NewRPIDMap).
+    miner(ServerPid, NextDiff, NextMiningType, NewRPIDMap, Reputation).
+
 
     
 create_block(PrevBlock, Data) ->
