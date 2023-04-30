@@ -5,7 +5,7 @@ You would need to have erlang installed on your machine.
 - open terminal
 - type erl
 - c(globalblockchain).
-- globalblockchain:start(NumOfNodes, Difficulty, ReputationThreshold)
+- globalblockchain:start(NumOfNodes, Difficulty, ReputationThreshold).
 - Ctrl + C to terminate
 
 Replace NumOfNodes with number of desired nodes eg. 3
