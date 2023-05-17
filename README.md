@@ -1,4 +1,4 @@
-# ReputationBlockchain
+# Reputation Blockchain
 
 To Run code
 You would need to have erlang installed on your machine.
